@@ -147,8 +147,10 @@ def train(mnist):
                 # 小的batch。当神经网络模型比较复杂或者验证数据比较大时，太大的batch
                 # 会导致计算时间过长甚至内存溢出的错误
                 validate_acc = sess.run(accuracy, feed_dict=validate_feed)
-                print('After %d trainning step(s), validation accuracy using average model is %g'
-                      % (i, validate_acc))
+                test_acc = sess.run(accuracy, feed_dict=test_feed)
+                # print('After %d trainning step(s), validation accuracy using average model is %g' % (i, validate_acc))
+                print('After %d trainning step(s), validation accuracy using average model is %g,'
+                      'test accuracy using average model is %g' % (i, validate_acc, test_acc))
 
             # 产生这一轮使用的一个batch的训练数据，并运行训练过程
             xs, ys = mnist.train.next_batch(BATCH_SIZE)
