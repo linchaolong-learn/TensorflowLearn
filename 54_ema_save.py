@@ -1,6 +1,7 @@
 import tensorflow as tf
 
 v = tf.Variable(0, dtype=tf.float32, name="v")
+v1 = tf.Variable(0, dtype=tf.float32, name="v1")
 
 # 在没有申明滑动平均模型是只有一个变量v，所以下面的语句只会输出"v:0"
 for variables in tf.global_variables():

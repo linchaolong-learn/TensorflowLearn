@@ -1,8 +1,8 @@
 import tensorflow as tf
 
 # 声明两个变量并计算它们的和
-v1 = tf.Variable(tf.random_normal([1], stddev=1, seed=1))
-v2 = tf.Variable(tf.random_normal([1], stddev=1, seed=1))
+v1 = tf.Variable(tf.random_normal([1], stddev=1, seed=1), name='v1')
+v2 = tf.Variable(tf.random_normal([1], stddev=1, seed=1), name='v2')
 result = v1 + v2
 
 init_op = tf.global_variables_initializer()
