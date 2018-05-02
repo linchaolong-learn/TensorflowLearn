@@ -2,4 +2,7 @@
 /venv
 __pycache__
 
-
+/flower_photos
+/mnist_data
+/MNIST_model
+/Saved_model
