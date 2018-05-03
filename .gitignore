@@ -6,3 +6,5 @@ __pycache__
 /mnist_data
 /MNIST_model
 /Saved_model
+/datasets
+/build

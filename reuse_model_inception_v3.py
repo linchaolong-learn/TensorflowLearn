@@ -17,18 +17,18 @@ BOTTLENECK_TENSOR_NAME = 'pool_3/_reshape:0'
 JPEG_DATA_TENSOR_NAME = 'DecodeJpeg/contents:0'
 
 # 下载的谷歌训练好的 Inception-v3 模型文件目录
-MODEL_DIR = '../../datasets/inception_dec_2015'
+MODEL_DIR = 'datasets/inception_dec_2015'
 
 # 下载的谷歌训练好的 Inception-v3 模型文件目录
 MODEL_FILE = 'tensorflow_inception_graph.pb'
 
 # 因为一个训练数据会被使用多次，所以可以将原始图像通过 Inception-v3 模型计算得到
 # 的特征向量保存在文件中，免去重复的计算。下面的变量定义了这些文件的存放地址
-CACHE_DIR = '../../datasets/bottleneck'
+CACHE_DIR = 'datasets/bottleneck'
 
 # 图片数据文件夹。在这个文件夹中每一个子文件夹代表一个需要区分的类别，每个子文件夹中
 # 存放了对应类别的图片
-INPUT_DATA = '../../datasets/flower_photos'
+INPUT_DATA = 'datasets/flower_photos'
 
 # 验证的数据百分比
 VALIDATION_PERCENTAGE = 10
@@ -168,11 +168,13 @@ def get_or_create_bottleneck(sess, image_lists, label_name, index, category, jpe
     return bottleneck_values
 
 
+# 这个函数随机获取一个 batch 的图片作为训练数据
 def get_random_cached_bottlenecks(sess, n_classes, image_lists, how_many, category, jpeg_data_tensor,
                                   bottleneck_tensor):
     bottlenecks = []
     ground_truths = []
     for _ in range(how_many):
+        # 随机一个类别和图片的编号加入当前的训练数据
         label_index = random.randrange(n_classes)
         label_name = list(image_lists.keys())[label_index]
         image_index = random.randrange(65536)
@@ -184,3 +186,96 @@ def get_random_cached_bottlenecks(sess, n_classes, image_lists, how_many, catego
         ground_truths.append(ground_truth)
 
     return bottlenecks, ground_truths
+
+
+# 这个函数获取全部的测试数据。在最终测试的时候需要在所有的测试数据上计算正确率
+def get_test_bottlenecks(sess, image_lists, n_classes, jpeg_data_tensor, bottleneck_tensor):
+    bottlenecks = []
+    ground_truths = []
+    label_name_list = list(image_lists.keys())
+    # 枚举所有的类别和每个类别中的测试图片
+    for label_index, label_name in enumerate(label_name_list):
+        category = 'testing'
+        for index, unused_base_name in enumerate(image_lists[label_name][category]):
+            # 通过 Inception-v3 模型计算图片对应的特征向量，并将其加入最终数据的列表
+            bottleneck = get_or_create_bottleneck(sess, image_lists, label_name, index, category, jpeg_data_tensor,
+                                                  bottleneck_tensor)
+            ground_truth = np.zeros(n_classes, dtype=np.float32)
+            ground_truth[label_index] = 1.0
+            bottlenecks.append(bottleneck)
+            ground_truths.append(ground_truth)
+    return bottlenecks, ground_truths
+
+
+def main():
+    # 读取所有图片
+    image_lists = create_image_lists(TEST_PERCENTAGE, VALIDATION_PERCENTAGE)
+    n_classes = len(image_lists.keys())
+
+    # 读取已经训练好的Inception-v3模型。谷歌训练好的模型保存在了 GraphDef Protocol
+    # Buffer 中，里面保存了每一个节点取值的计算方法以及变脸的取值。TensorFlow 模型持
+    # 久化的问题在第 5 章中有详细的介绍
+    with gfile.FastGFile(os.path.join(MODEL_DIR, MODEL_FILE), 'rb') as f:
+        graph_def = tf.GraphDef()
+        graph_def.ParseFromString(f.read())
+
+    # 加载读取的 Inception-v3 模型，并返回数据输入所对应的张量以及计算瓶颈层结果所对应
+    # 的张量
+    bottleneck_tensor, jpeg_data_tensor = tf.import_graph_def(
+        graph_def, return_elements=[BOTTLENECK_TENSOR_NAME, JPEG_DATA_TENSOR_NAME])
+
+    # 定义新的神经网络输入，这个输入就是新的图片经过 Inception-v3 模型前向传播到达瓶颈层
+    # 是的节点取值。可以将这个过程类似的理解为一种特征提取
+    bottleneck_input = tf.placeholder(tf.float32, [None, BOTTLENECK_TENSOR_SIZE], name='BottleneckInputPlaceholder')
+    # 定义新的标准答案输入
+    ground_truth_input = tf.placeholder(tf.float32, [None, n_classes], name='GroundTruthInput')
+
+    # 定义一层全链接层来解决新的图片分类问题。因为训练好的 Inception-v3 模型已经将原始
+    # 的图片抽象为更加容易分类的特征向量了，所以不需要再训练那么复杂的神经网络来完成这
+    # 个新的分类任务
+    with tf.name_scope('final_training_ops'):
+        weights = tf.Variable(tf.truncated_normal([BOTTLENECK_TENSOR_SIZE, n_classes], stddev=0.001))
+        biases = tf.Variable(tf.zeros([n_classes]))
+        logits = tf.matmul(bottleneck_input, weights) + biases
+        final_tensor = tf.nn.softmax(logits)
+
+    # 定义交叉熵损失函数。
+    cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=ground_truth_input)
+    cross_entropy_mean = tf.reduce_mean(cross_entropy)
+    train_step = tf.train.GradientDescentOptimizer(LEARNING_RATE).minimize(cross_entropy_mean)
+
+    # 计算正确率。
+    with tf.name_scope('evaluation'):
+        correct_prediction = tf.equal(tf.argmax(final_tensor, 1), tf.argmax(ground_truth_input, 1))
+        evaluation_step = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
+    with tf.Session() as sess:
+        init = tf.global_variables_initializer()
+        sess.run(init)
+        # 训练过程。
+        for i in range(STEPS):
+            # 每次获取一个 batch 的训练数据
+            train_bottlenecks, train_ground_truth = get_random_cached_bottlenecks(
+                sess, n_classes, image_lists, BATCH, 'training', jpeg_data_tensor, bottleneck_tensor)
+            sess.run(train_step,
+                     feed_dict={bottleneck_input: train_bottlenecks, ground_truth_input: train_ground_truth})
+            # 在验证数据上测试正确率
+            if i % 100 == 0 or i + 1 == STEPS:
+                validation_bottlenecks, validation_ground_truth = get_random_cached_bottlenecks(
+                    sess, n_classes, image_lists, BATCH, 'validation', jpeg_data_tensor, bottleneck_tensor)
+                validation_accuracy = sess.run(evaluation_step, feed_dict={
+                    bottleneck_input: validation_bottlenecks, ground_truth_input: validation_ground_truth})
+                print('Step %d: Validation accuracy on random sampled %d examples = %.1f%%' %
+                      (i, BATCH, validation_accuracy * 100))
+
+        # 在最后的测试数据上测试正确率。
+        test_bottlenecks, test_ground_truth = get_test_bottlenecks(
+            sess, image_lists, n_classes, jpeg_data_tensor, bottleneck_tensor)
+        test_accuracy = sess.run(evaluation_step, feed_dict={
+            bottleneck_input: test_bottlenecks, ground_truth_input: test_ground_truth})
+        print('Final test accuracy = %.1f%%' % (test_accuracy * 100))
+
+
+if __name__ == '__main__':
+    main()
+
