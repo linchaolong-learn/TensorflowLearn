@@ -52,7 +52,7 @@ image_raw_data = tf.gfile.FastGFile("datasets/cat.jpg", "rb").read()
 with tf.Session() as sess:
     img_data = tf.image.decode_jpeg(image_raw_data)
     boxes = tf.constant([[[0.05, 0.05, 0.9, 0.7], [0.35, 0.47, 0.5, 0.56]]])
-    # 运行6次获得9种不同的图像
+    # 运行9次获得9种不同的图像
     for i in range(9):
         result = preprocess_for_train(img_data, 299, 299, boxes)
         plt.imshow(result.eval())
