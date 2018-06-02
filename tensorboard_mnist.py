@@ -11,7 +11,7 @@ REGULARIZATION_RATE = 0.0001
 TRAINING_STEPS = 10000
 MOVING_AVERAGE_DECAY = 0.99
 
-LOG_DIR = 'log/mnist.log'
+LOG_DIR = 'log'
 SPRITE_FILE = 'mnist_sprite.jpg'
 META_FIEL = "mnist_meta.tsv"
 TENSOR_NAME = "FINAL_LOGITS"
@@ -22,6 +22,7 @@ def train(mnist):
     with tf.name_scope('input'):
         x = tf.placeholder(tf.float32, [None, mnist_inference.INPUT_NODE], name='x-input')
         y_ = tf.placeholder(tf.float32, [None, mnist_inference.OUTPUT_NODE], name='y-input')
+
     regularizer = tf.contrib.layers.l2_regularizer(REGULARIZATION_RATE)
     y = mnist_inference.inference(x, regularizer)
     global_step = tf.Variable(0, trainable=False)
@@ -66,18 +67,18 @@ def train(mnist):
 
 def visualisation(final_result):
     y = tf.Variable(final_result, name=TENSOR_NAME)
-    summary_writer = tf.summary.FileWriter(LOG_DIR)
+    summary_writer = tf.summary.FileWriter(os.path.join(LOG_DIR, "model.log"), tf.get_default_graph())
 
     config = projector.ProjectorConfig()
     embedding = config.embeddings.add()
     embedding.tensor_name = y.name
 
     # Specify where you find the metadata
-    embedding.metadata_path = META_FIEL
+    # embedding.metadata_path = META_FIEL
 
     # Specify where you find the sprite (we will create this later)
-    embedding.sprite.image_path = SPRITE_FILE
-    embedding.sprite.single_image_dim.extend([28, 28])
+    # embedding.sprite.image_path = SPRITE_FILE
+    # embedding.sprite.single_image_dim.extend([28, 28])
 
     # Say that you want to visualise the embeddings
     projector.visualize_embeddings(summary_writer, config)
