@@ -128,6 +128,7 @@ def main(argv=None):
         # 计算变量的滑动平均值。
         variable_averages = tf.train.ExponentialMovingAverage(MOVING_AVERAGE_DECAY, global_step)
         variables_averages_op = variable_averages.apply(tf.trainable_variables())
+
         # 每一轮迭代需要更新变量的取值并更新变量的滑动平均值。
         train_op = tf.group(apply_gradient_op, variables_averages_op)
 
