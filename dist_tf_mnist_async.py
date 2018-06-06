@@ -61,6 +61,7 @@ def build_model(x, y_, is_chief):
 
 
 def main(argv=None):
+    # print('job_name=%s, task_id=%s' % (FLAGS.job_name, FLAGS.task_id))
     # 解析flags并通过tf.train.ClusterSpec配置TensorFlow集群。
     ps_hosts = FLAGS.ps_hosts.split(',')
     worker_hosts = FLAGS.worker_hosts.split(',')
